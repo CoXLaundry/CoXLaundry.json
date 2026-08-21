@@ -765,6 +765,27 @@ function renderAttendanceList() {
         </div>
     `).join('');
 }
+async function updateStatusLaundry(invoiceNumber, statusBaru) {
+  // statusBaru: 'Diterima', 'Proses Cuci', 'Setrika', 'Selesai', atau 'Diambil'
+  try {
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "update_work_status",
+        invoice: invoiceNumber,
+        workStatus: statusBaru
+      })
+    });
+    const result = await response.json();
+    if (result.status === "success") {
+      alert(`Status transaksi ${invoiceNumber} berhasil diubah menjadi: ${statusBaru}`);
+    } else {
+      alert("Gagal mengubah status: " + result.message);
+    }
+  } catch (error) {
+    console.error("Error updating status:", error);
+  }
+}
 
 // --- INISIALISASI ---
 checkSession();
