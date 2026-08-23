@@ -50,7 +50,7 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: "login", username: u, pin: p }) })
     .then(res => res.json()).then(data => {
         if (data.status === "success") {
-            localStorage.setItem('cox_session', JSON.stringify({ username: u, role: data.role, permissions: data.permissions || "" }));
+            localStorage.setItem('cox_session', JSON.stringify({ username: u, pin: p, role: data.role, permissions: data.permissions || "" }));
             checkSession();
         } else document.getElementById('loginMessage').innerText = "Username/PIN salah!";
     }).catch(() => { document.getElementById('loginMessage').innerText = "Gagal terhubung ke server. Cek koneksi internet."; })
@@ -70,20 +70,32 @@ function renderUsers() {
         const card = document.createElement('div');
         card.classList.add('history-card');
         card.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
-            <div><span style="font-weight:700;">👤 ${user.username}</span><br><small>Role: ${user.role} | Izin: ${user.permissions || 'Tidak ada'}</small></div>
+            <div><span style="font-weight:700;">👤 ${escapeHtml(user.username)}</span><br><small>Role: ${escapeHtml(user.role)} | Izin: ${escapeHtml(user.permissions || 'Tidak ada')}</small></div>
             <div style="display:flex; gap:5px;">
-                <button onclick="openEditUser('${user.username}', '${user.pin}', '${user.role}', '${user.permissions}')" style="background:#e0e7ff; color:#000996; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Edit</button>
-                ${user.username !== currentUser.username ? `<button onclick="deleteUser('${user.username}')" style="background:#fee2e2; color:#991b1b; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Hapus</button>` : ''}
+                <button class="btn-edit-user" data-username="${escapeHtml(user.username)}" style="background:#e0e7ff; color:#000996; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Edit</button>
+                ${user.username !== currentUser.username ? `<button class="btn-delete-user" data-username="${escapeHtml(user.username)}" style="background:#fee2e2; color:#991b1b; border:none; padding:6px 10px; border-radius:6px; cursor:pointer;">Hapus</button>` : ''}
             </div>
         </div>`;
         list.appendChild(card);
     });
 }
 
-window.openEditUser = function(u, p, r, perms) {
+document.getElementById('userList').addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.btn-edit-user');
+    const delBtn = e.target.closest('.btn-delete-user');
+    if (editBtn) {
+        const user = usersData.find(u => u.username === editBtn.dataset.username);
+        if (user) openEditUser(user.username, user.role, user.permissions);
+    } else if (delBtn) {
+        deleteUser(delBtn.dataset.username);
+    }
+});
+
+window.openEditUser = function(u, r, perms) {
     document.getElementById('editUserLabel').innerText = u;
     document.getElementById('editUsername').value = u;
-    document.getElementById('editUserPin').value = p;
+    document.getElementById('editUserPin').value = '';
+    document.getElementById('editUserPin').placeholder = 'Kosongkan jika tidak ingin ubah PIN';
     document.getElementById('editUserRole').value = r;
     const permsArr = perms ? perms.split(',') : [];
     const container = document.getElementById('editPermissionsContainer');
@@ -95,20 +107,26 @@ window.openEditUser = function(u, p, r, perms) {
 
 document.getElementById('updateUserBtn').addEventListener('click', () => {
     const u = document.getElementById('editUsername').value, perms = Array.from(document.querySelectorAll('.edit-perm:checked')).map(cb => cb.value).join(',');
-    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "update_user", username: u, pin: document.getElementById('editUserPin').value, role: document.getElementById('editUserRole').value, permissions: perms }) })
-    .then(() => { alert("Update berhasil!"); document.getElementById('editUserModal').style.display = 'none'; loadCatalogFromCloud(); });
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: "update_user", username: u, pin: document.getElementById('editUserPin').value, role: document.getElementById('editUserRole').value, permissions: perms }) })
+    .then(res => res.json()).then(result => {
+        if (result.status === 'success') { alert("Update berhasil!"); document.getElementById('editUserModal').style.display = 'none'; loadCatalogFromCloud(); }
+        else alert('Gagal update: ' + (result.message || 'Terjadi kesalahan'));
+    }).catch(() => alert('Gagal terhubung ke server.'));
 });
 
 document.getElementById('saveUserBtn').addEventListener('click', () => {
     const uName = document.getElementById('newUsername').value, perms = Array.from(document.querySelectorAll('.perm-checkbox:checked')).map(cb => cb.value).join(',');
     if (!uName || !document.getElementById('newUserPin').value) { alert('Username dan PIN wajib diisi!'); return; }
-    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "add_user", username: uName, pin: document.getElementById('newUserPin').value, role: document.getElementById('newUserRole').value, permissions: perms }) })
-    .then(() => { alert("User ditambahkan!"); document.getElementById('addUserModal').style.display = 'none'; loadCatalogFromCloud(); });
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: "add_user", username: uName, pin: document.getElementById('newUserPin').value, role: document.getElementById('newUserRole').value, permissions: perms }) })
+    .then(res => res.json()).then(result => {
+        if (result.status === 'success') { alert("User ditambahkan!"); document.getElementById('addUserModal').style.display = 'none'; loadCatalogFromCloud(); }
+        else alert('Gagal menambah user: ' + (result.message || 'Terjadi kesalahan'));
+    }).catch(() => alert('Gagal terhubung ke server.'));
 });
 
 window.deleteUser = function(username) {
     if (!confirm(`Hapus pengguna "${username}"?`)) return;
-    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: "delete_user", username }) })
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: "delete_user", username }) })
     .then(res => res.json()).then(result => {
         if (result.status === 'success') loadCatalogFromCloud();
         else alert('Gagal menghapus pengguna.');
@@ -131,7 +149,10 @@ window.switchView = function(viewId) {
 
 // --- MUAT DATA DARI CLOUD ---
 function loadCatalogFromCloud() {
-    fetch(GOOGLE_SCRIPT_URL + "?t=" + new Date().getTime())
+    const authQuery = currentUser
+        ? `&actorUsername=${encodeURIComponent(currentUser.username)}&actorPin=${encodeURIComponent(currentUser.pin)}`
+        : '';
+    fetch(GOOGLE_SCRIPT_URL + "?t=" + new Date().getTime() + authQuery)
     .then(res => res.json()).then(data => {
         products = data.catalog || []; 
         customers = data.customers || []; 
@@ -164,6 +185,28 @@ function formatDateShort(d) {
     return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Escape nilai apa pun sebelum disisipkan ke innerHTML, agar nama pelanggan/produk/
+// keterangan yang mengandung karakter HTML (<, >, ", ', &) tidak bisa menyuntik script
+// (stored XSS) atau merusak markup.
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+// Menempelkan identitas user yang sedang login ke SETIAP request ke backend, supaya
+// Code.gs bisa memverifikasi ulang siapa pengirimnya dan apakah dia berhak melakukan
+// action ini — bukan cuma percaya pada apa yang dikirim client. Nama field sengaja
+// "actorUsername"/"actorPin" (bukan "username"/"pin") supaya tidak bentrok dengan field
+// yang sudah dipakai untuk data target, misalnya user baru yang sedang dibuat di add_user.
+function withAuth(payload) {
+    return JSON.stringify({
+        ...payload,
+        actorUsername: currentUser ? currentUser.username : '',
+        actorPin: currentUser ? currentUser.pin : ''
+    });
+}
+
 function formatWhatsApp(number) {
     let n = String(number || '').replace(/\D/g, '');
     if (n.startsWith('0')) n = '62' + n.slice(1);
@@ -189,17 +232,19 @@ function renderProducts() {
         return;
     }
     productGrid.innerHTML = filtered.map(p => `
-        <div class="product-card" data-productid="${p.id}">
-            <h4>${p.name}</h4>
+        <div class="product-card" data-productid="${escapeHtml(p.id)}">
+            <h4>${escapeHtml(p.name)}</h4>
             <p>${formatRupiah(p.price)}${p.category === 'Kiloan' ? '/kg' : ''}</p>
-            ${hasCatalogAccess() ? `<button class="delete-product-btn" title="Hapus" onclick="event.stopPropagation(); deleteProduct('${p.id}')">×</button>` : ''}
+            ${hasCatalogAccess() ? `<button class="delete-product-btn" title="Hapus" data-productid="${escapeHtml(p.id)}">×</button>` : ''}
         </div>
     `).join('');
 }
 
 productGrid.addEventListener('click', (e) => {
+    const delBtn = e.target.closest('.delete-product-btn');
+    if (delBtn) { deleteProduct(delBtn.dataset.productid); return; }
     const card = e.target.closest('.product-card');
-    if (!card || e.target.classList.contains('delete-product-btn')) return;
+    if (!card) return;
     const product = products.find(p => String(p.id) === card.dataset.productid);
     if (product) addToCart(product);
 });
@@ -237,7 +282,7 @@ function renderCart() {
             return `
             <div class="cart-item-row" data-cartid="${it.cartId}">
                 <div class="cart-item-info">
-                    <span>${it.name}</span>
+                    <span>${escapeHtml(it.name)}</span>
                     <div class="cart-item-qty">
                         ${controlHtml}
                         <span style="font-size:12px;color:var(--text-muted);">@ ${formatRupiah(it.price)}</span>
@@ -401,19 +446,22 @@ checkoutBtn.addEventListener('click', async () => {
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({ 
-                action: 'transaction', 
-                invoice, 
+            body: withAuth({
+                action: 'transaction',
+                invoice, // dikirim sebagai fallback; server SEHARUSNYA mengabaikan ini dan generate sendiri (lihat Code.gs)
                 tanggalMasuk: waktu.masuk,
                 tanggalSelesai: waktu.selesai,
-                items: itemsSummary, 
-                total, cash, change, customerName, customerWA, paymentStatus: status 
+                items: itemsSummary,
+                total, cash, change, customerName, customerWA, paymentStatus: status
             })
         });
         const result = await res.json();
         if (result.status === 'success') {
-            const trx = { invoice, items: itemsSummary, total, name: customerName, wa: customerWA, status, selesai: waktu.selesai };
-            alert(`Transaksi ${invoice} berhasil disimpan!\nEstimasi Selesai: ${waktu.selesai}`);
+            // Pakai nomor invoice dari server kalau tersedia (dibuat atomik via LockService di Code.gs),
+            // supaya dua kasir yang checkout hampir bersamaan tidak dapat nomor yang sama.
+            const finalInvoice = result.invoice || invoice;
+            const trx = { invoice: finalInvoice, items: itemsSummary, total, name: customerName, wa: customerWA, status, selesai: waktu.selesai };
+            alert(`Transaksi ${finalInvoice} berhasil disimpan!\nEstimasi Selesai: ${waktu.selesai}`);
             if (customerWA && confirm('Kirim struk ke WhatsApp pelanggan sekarang?')) sendReceiptWA(trx);
             cart = [];
             document.getElementById('customerName').value = '';
@@ -524,18 +572,18 @@ function renderHistory() {
         return `
         <div class="history-card">
             <div class="hc-top">
-                <span class="hc-inv">${t.invoice || '-'}</span>
-                <span class="badge ${statusTampil === 'Lunas' ? 'lunas' : 'belum'}">${statusTampil}</span>
+                <span class="hc-inv">${escapeHtml(t.invoice || '-')}</span>
+                <span class="badge ${statusTampil === 'Lunas' ? 'lunas' : 'belum'}">${escapeHtml(statusTampil)}</span>
             </div>
             <div class="hc-date">${formatDateShort(tanggalTampil)}</div>
-            <div class="hc-middle">${itemsTampil}</div>
+            <div class="hc-middle">${escapeHtml(itemsTampil)}</div>
             <div class="hc-bottom">
-                <span class="hc-cust">${namaTampil}</span>
+                <span class="hc-cust">${escapeHtml(namaTampil)}</span>
                 <span class="hc-total">${formatRupiah(totalTampil)}</span>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-                <button class="btn-print" data-invoice="${t.invoice}" style="background:#000996; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; box-shadow: 0 4px 10px rgba(0, 9, 150, 0.3);">🖨️ Cetak Struk</button>
-                ${waTampil ? `<button class="btn-wa" data-invoice="${t.invoice}">📲 Kirim Struk WA</button>` : ''}
+                <button class="btn-print" data-invoice="${escapeHtml(t.invoice)}" style="background:#000996; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; box-shadow: 0 4px 10px rgba(0, 9, 150, 0.3);">🖨️ Cetak Struk</button>
+                ${waTampil ? `<button class="btn-wa" data-invoice="${escapeHtml(t.invoice)}">📲 Kirim Struk WA</button>` : ''}
             </div>
         </div>
         `;
@@ -597,8 +645,8 @@ function renderCashOutList() {
     const sorted = [...cashOuts].sort((a, b) => new Date(b.date) - new Date(a.date));
     container.innerHTML = sorted.map(c => `
         <div class="history-card">
-            <div class="hc-top"><span class="hc-inv">${c.description}</span><span class="hc-date">${formatDateShort(c.date)}</span></div>
-            <div class="hc-bottom"><span class="hc-cust">${c.user || ''}</span><span class="hc-total" style="color:var(--danger)">- ${formatRupiah(c.amount)}</span></div>
+            <div class="hc-top"><span class="hc-inv">${escapeHtml(c.description)}</span><span class="hc-date">${formatDateShort(c.date)}</span></div>
+            <div class="hc-bottom"><span class="hc-cust">${escapeHtml(c.user || '')}</span><span class="hc-total" style="color:var(--danger)">- ${formatRupiah(c.amount)}</span></div>
         </div>
     `).join('');
 }
@@ -620,7 +668,7 @@ document.getElementById('saveCoBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveCoBtn');
     btn.disabled = true; btn.innerText = 'Menyimpan...';
     try {
-        const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'cash_out', date: new Date().toISOString(), description: desc, amount, user: currentUser.username }) });
+        const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'cash_out', date: new Date().toISOString(), description: desc, amount, user: currentUser.username }) });
         const result = await res.json();
         if (result.status === 'success') {
             document.getElementById('cashOutModal').style.display = 'none';
@@ -653,7 +701,7 @@ document.getElementById('saveProductBtn').addEventListener('click', async () => 
     const btn = document.getElementById('saveProductBtn');
     btn.disabled = true; btn.innerText = 'Menyimpan...';
     try {
-        const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'add_product', product: { id: 'P' + Date.now(), name, price, category } }) });
+        const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'add_product', product: { id: 'P' + Date.now(), name, price, category } }) });
         const result = await res.json();
         if (result.status === 'success') {
             document.getElementById('addProductModal').style.display = 'none';
@@ -668,7 +716,7 @@ document.getElementById('saveProductBtn').addEventListener('click', async () => 
 
 window.deleteProduct = function(productId) {
     if (!confirm('Hapus layanan ini?')) return;
-    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'delete_product', productId }) })
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'delete_product', productId }) })
     .then(res => res.json()).then(result => {
         if (result.status === 'success') loadCatalogFromCloud();
         else alert('Gagal menghapus layanan.');
@@ -694,7 +742,7 @@ window.setSaldoAwal = function() {
     if (input === null) return;
     const amount = Number(String(input).replace(/[^0-9-]/g, ''));
     if (isNaN(amount)) { alert('Input tidak valid.'); return; }
-    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'set_saldo_awal', amount }) })
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'set_saldo_awal', amount }) })
     .then(res => res.json()).then(result => {
         if (result.status === 'success') { saldoAwal = amount; renderFinance(); alert('Saldo awal diperbarui.'); }
         else alert('Gagal menyimpan saldo awal.');
@@ -743,7 +791,7 @@ function renderFinanceDetail() {
         container.innerHTML = cashFlow.map(f => `
             <div style="background: white; padding: 12px 15px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                 <div style="display: flex; flex-direction: column; gap: 3px;">
-                    <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">${f.desc}</span>
+                    <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">${escapeHtml(f.desc)}</span>
                     <span style="font-size: 11px; color: var(--text-muted);">${formatDateShort(f.date)}</span>
                 </div>
                 <span style="font-size: 14px; font-weight: 700; color: ${f.type === 'in' ? 'var(--primary)' : 'var(--danger)'};">
@@ -797,7 +845,7 @@ async function submitAttendance(type) {
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({
+            body: withAuth({
                 action: 'attendance',
                 username: currentUser.username,
                 role: currentUser.role,
@@ -846,11 +894,11 @@ function renderAttendanceList() {
     container.innerHTML = sorted.map(a => `
         <div class="history-card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
-                <span style="font-weight:700; font-size:13px;">👤 ${a.username} (${a.role || 'Staff'})</span><br>
+                <span style="font-weight:700; font-size:13px;">👤 ${escapeHtml(a.username)} (${escapeHtml(a.role || 'Staff')})</span><br>
                 <span style="font-size:11px; color:var(--text-muted);">📅 ${cleanDateTime(a.tanggal, false)} | ⏰ ${cleanDateTime(a.waktu, true)}</span>
             </div>
             <span class="badge ${a.type === 'Masuk' ? 'lunas' : 'belum'}" style="padding: 4px 10px; font-size: 11px;">
-                ${a.type}
+                ${escapeHtml(a.type)}
             </span>
         </div>
     `).join('');
@@ -860,7 +908,7 @@ async function updateStatusLaundry(invoiceNumber, statusBaru) {
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
-      body: JSON.stringify({
+      body: withAuth({
         action: "update_work_status",
         invoice: invoiceNumber,
         workStatus: statusBaru
