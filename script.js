@@ -334,6 +334,33 @@ function generateInvoiceNumber() {
     return `INV${y}${m}${d}${String(todayCount).padStart(3, '0')}`;
 }
 
+// --- FUNGSI ESTIMASI WAKTU SELESAI ---
+function hitungEstimasiSelesai(keranjangBelanja) {
+    const sekarang = new Date();
+    let isExpress = false;
+    
+    // Cek apakah ada layanan express di keranjang
+    for (let item of keranjangBelanja) {
+        if (item.name.toLowerCase().includes("express") || item.category.toLowerCase().includes("express")) {
+            isExpress = true;
+            break;
+        }
+    }
+    
+    const estimasiSelesai = new Date(sekarang.getTime());
+    if (isExpress) {
+        estimasiSelesai.setHours(estimasiSelesai.getHours() + 12); // Express 12 Jam
+    } else {
+        estimasiSelesai.setHours(estimasiSelesai.getHours() + 24); // Reguler 1 Hari (24 Jam)
+    }
+    
+    const formatOpsi = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return {
+        masuk: sekarang.toLocaleString('id-ID', formatOpsi),
+        selesai: estimasiSelesai.toLocaleString('id-ID', formatOpsi)
+    };
+}
+
 checkoutBtn.addEventListener('click', async () => {
     if (cart.length === 0) { alert('Keranjang masih kosong!'); return; }
     const customerName = document.getElementById('customerName').value.trim();
@@ -347,17 +374,27 @@ checkoutBtn.addEventListener('click', async () => {
     const invoice = generateInvoiceNumber();
     const itemsSummary = buildItemsSummary(cart);
 
+    // Hitung tanggal masuk & selesai
+    const waktu = hitungEstimasiSelesai(cart);
+
     checkoutBtn.disabled = true;
     checkoutBtn.innerText = 'Memproses...';
     try {
         const res = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'transaction', invoice, items: itemsSummary, total, cash, change, customerName, customerWA, paymentStatus: status })
+            body: JSON.stringify({ 
+                action: 'transaction', 
+                invoice, 
+                tanggalMasuk: waktu.masuk,
+                tanggalSelesai: waktu.selesai,
+                items: itemsSummary, 
+                total, cash, change, customerName, customerWA, paymentStatus: status 
+            })
         });
         const result = await res.json();
         if (result.status === 'success') {
-            const trx = { invoice, items: itemsSummary, total, name: customerName, wa: customerWA, status };
-            alert(`Transaksi ${invoice} berhasil disimpan!`);
+            const trx = { invoice, items: itemsSummary, total, name: customerName, wa: customerWA, status, selesai: waktu.selesai };
+            alert(`Transaksi ${invoice} berhasil disimpan!\nEstimasi Selesai: ${waktu.selesai}`);
             if (customerWA && confirm('Kirim struk ke WhatsApp pelanggan sekarang?')) sendReceiptWA(trx);
             cart = [];
             document.getElementById('customerName').value = '';
@@ -487,12 +524,19 @@ document.getElementById('refreshHistoryBtn').addEventListener('click', () => loa
 function sendReceiptWA(trx) {
     if (!trx.wa) { alert('Nomor WhatsApp pelanggan tidak tersedia.'); return; }
     const wa = formatWhatsApp(trx.wa);
-    const pesan = `Halo ${trx.name || ''}, terima kasih sudah menggunakan CoX Laundry!\n\n` +
+    let pesan = `Halo ${trx.name || ''}, terima kasih sudah menggunakan CoX Laundry!\n\n` +
         `No. Invoice: ${trx.invoice}\n` +
         `Rincian: ${trx.items}\n` +
         `Total: ${formatRupiah(trx.total)}\n` +
-        `Status: ${trx.status}\n\n` +
-        `Terima kasih! 🙏`;
+        `Status: ${trx.status}\n`;
+        
+    if (trx.selesai) {
+        pesan += `Estimasi Selesai: ${trx.selesai}\n\n`;
+    } else {
+        pesan += `\n`;
+    }
+    
+    pesan += `Terima kasih! 🙏`;
     window.open(`https://wa.me/${wa}?text=${encodeURIComponent(pesan)}`, '_blank');
 }
 
@@ -765,8 +809,8 @@ function renderAttendanceList() {
         </div>
     `).join('');
 }
+
 async function updateStatusLaundry(invoiceNumber, statusBaru) {
-  // statusBaru: 'Diterima', 'Proses Cuci', 'Setrika', 'Selesai', atau 'Diambil'
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
