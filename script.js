@@ -149,10 +149,8 @@ window.switchView = function(viewId) {
 
 // --- MUAT DATA DARI CLOUD ---
 function loadCatalogFromCloud() {
-    const authQuery = currentUser
-        ? `&actorUsername=${encodeURIComponent(currentUser.username)}&actorPin=${encodeURIComponent(currentUser.pin)}`
-        : '';
-    fetch(GOOGLE_SCRIPT_URL + "?t=" + new Date().getTime() + authQuery)
+    if (!currentUser) return;
+    fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'get_catalog' }) })
     .then(res => res.json()).then(data => {
         products = data.catalog || []; 
         customers = data.customers || []; 
@@ -355,7 +353,7 @@ document.getElementById('cashGiven').addEventListener('input', updateChange);
 function renderCustomerDatalist() {
     const list = document.getElementById('customerList');
     if (!list) return;
-    list.innerHTML = customers.map(c => `<option value="${c.name}">`).join('');
+    list.innerHTML = customers.map(c => `<option value="${escapeHtml(c.name)}">`).join('');
 }
 
 document.getElementById('customerName').addEventListener('input', (e) => {
