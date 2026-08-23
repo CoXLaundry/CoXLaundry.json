@@ -496,7 +496,7 @@ window.printThermalReceipt = async function(invoice, name, itemsStr, total, cash
     }
 };
 
-// --- MODUL RIWAYAT TRANSAKSI & KIRIM WA ---
+// -// --- MODUL RIWAYAT TRANSAKSI & KIRIM WA ---
 function renderHistory() {
     const container = document.getElementById('historyList');
     if (!container) return;
@@ -504,28 +504,38 @@ function renderHistory() {
         container.innerHTML = '<p style="text-align:center;color:var(--text-muted);">Belum ada transaksi.</p>';
         return;
     }
-    const sorted = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Sort berdasarkan tanggal terbaru
+    const sorted = [...transactions].sort((a, b) => {
+        const dateA = new Date(a.date || a.tanggalMasuk || a.tanggal || 0);
+        const dateB = new Date(b.date || b.tanggalMasuk || b.tanggal || 0);
+        return dateB - dateA;
+    });
+
     container.innerHTML = sorted.map(t => {
-        // Fallback ditambahkan untuk menghindari undefined jika nama kolom dari server sedikit berbeda
-        const statusTampil = t.status || t.paymentStatus || "Belum Lunas";
-        const namaTampil = t.name || t.customerName || "Pelanggan Umum";
-        const totalTampil = t.total || 0;
-        
+        // Fallback lengkap untuk mengantisipasi perbedaan nama kolom dari Apps Script/Sheets
+        const statusTampil = t.status || t.paymentStatus || t.statusPembayaran || "Belum Lunas";
+        const namaTampil = t.name || t.customerName || t.namaPelanggan || "Pelanggan Umum";
+        const totalTampil = Number(t.total || t.totalBayar || 0);
+        const tanggalTampil = t.date || t.tanggalMasuk || t.tanggal || '';
+        const itemsTampil = t.items || t.rincianLayanan || '-';
+        const waTampil = t.wa || t.noWhatsApp || '';
+
         return `
         <div class="history-card">
             <div class="hc-top">
                 <span class="hc-inv">${t.invoice || '-'}</span>
                 <span class="badge ${statusTampil === 'Lunas' ? 'lunas' : 'belum'}">${statusTampil}</span>
             </div>
-            <div class="hc-date">${formatDateShort(t.date || t.tanggal)}</div>
-            <div class="hc-middle">${t.items || '-'}</div>
+            <div class="hc-date">${formatDateShort(tanggalTampil)}</div>
+            <div class="hc-middle">${itemsTampil}</div>
             <div class="hc-bottom">
                 <span class="hc-cust">${namaTampil}</span>
                 <span class="hc-total">${formatRupiah(totalTampil)}</span>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                 <button class="btn-print" data-invoice="${t.invoice}" style="background:#000996; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; box-shadow: 0 4px 10px rgba(0, 9, 150, 0.3);">🖨️ Cetak Struk</button>
-                ${t.wa ? `<button class="btn-wa" data-invoice="${t.invoice}">📲 Kirim Struk WA</button>` : ''}
+                ${waTampil ? `<button class="btn-wa" data-invoice="${t.invoice}">📲 Kirim Struk WA</button>` : ''}
             </div>
         </div>
         `;
