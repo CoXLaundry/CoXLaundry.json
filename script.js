@@ -336,18 +336,9 @@ function generateInvoiceNumber() {
 }
 
 // --- FUNGSI ESTIMASI WAKTU SELESAI ---
-function hitungEstimasiSelesai(keranjangBelanja) {
-    const sekarang = new Date();
-    let isExpress = false;
-    
-    // Cek apakah ada layanan express di keranjang
-    for (let item of keranjangBelanja) {
-        if (item.name.toLowerCase().includes("express") || item.category.toLowerCase().includes("express")) {
-            isExpress = true;
-            break;
-        }
-    }
-    function perbaruiTampilanWaktu() {
+
+// Fungsi ini dikeluarkan agar tidak menyebabkan error (Sudah Diperbaiki)
+function perbaruiTampilanWaktu() {
     const tglMasukEl = document.getElementById('tglMasukDisplay');
     const tglSelesaiEl = document.getElementById('tglSelesaiDisplay');
     
@@ -362,6 +353,19 @@ function hitungEstimasiSelesai(keranjangBelanja) {
         tglSelesaiEl.value = waktu.selesai;
     }
 }   
+
+function hitungEstimasiSelesai(keranjangBelanja) {
+    const sekarang = new Date();
+    let isExpress = false;
+    
+    // Cek apakah ada layanan express di keranjang
+    for (let item of keranjangBelanja) {
+        if (item.name.toLowerCase().includes("express") || item.category.toLowerCase().includes("express")) {
+            isExpress = true;
+            break;
+        }
+    }
+    
     const estimasiSelesai = new Date(sekarang.getTime());
     if (isExpress) {
         estimasiSelesai.setHours(estimasiSelesai.getHours() + 12); // Express 12 Jam
@@ -501,24 +505,31 @@ function renderHistory() {
         return;
     }
     const sorted = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-    container.innerHTML = sorted.map(t => `
+    container.innerHTML = sorted.map(t => {
+        // Fallback ditambahkan untuk menghindari undefined jika nama kolom dari server sedikit berbeda
+        const statusTampil = t.status || t.paymentStatus || "Belum Lunas";
+        const namaTampil = t.name || t.customerName || "Pelanggan Umum";
+        const totalTampil = t.total || 0;
+        
+        return `
         <div class="history-card">
             <div class="hc-top">
-                <span class="hc-inv">${t.invoice}</span>
-                <span class="badge ${t.status === 'Lunas' ? 'lunas' : 'belum'}">${t.status}</span>
+                <span class="hc-inv">${t.invoice || '-'}</span>
+                <span class="badge ${statusTampil === 'Lunas' ? 'lunas' : 'belum'}">${statusTampil}</span>
             </div>
-            <div class="hc-date">${formatDateShort(t.date)}</div>
-            <div class="hc-middle">${t.items}</div>
+            <div class="hc-date">${formatDateShort(t.date || t.tanggal)}</div>
+            <div class="hc-middle">${t.items || '-'}</div>
             <div class="hc-bottom">
-                <span class="hc-cust">${t.name || '-'}</span>
-                <span class="hc-total">${formatRupiah(t.total)}</span>
+                <span class="hc-cust">${namaTampil}</span>
+                <span class="hc-total">${formatRupiah(totalTampil)}</span>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                 <button class="btn-print" data-invoice="${t.invoice}" style="background:#000996; color:white; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; box-shadow: 0 4px 10px rgba(0, 9, 150, 0.3);">🖨️ Cetak Struk</button>
                 ${t.wa ? `<button class="btn-wa" data-invoice="${t.invoice}">📲 Kirim Struk WA</button>` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 document.getElementById('historyList').addEventListener('click', (e) => {
@@ -530,7 +541,11 @@ document.getElementById('historyList').addEventListener('click', (e) => {
     if (e.target.classList.contains('btn-wa')) {
         sendReceiptWA(trx);
     } else if (e.target.classList.contains('btn-print')) {
-        window.printThermalReceipt(trx.invoice, trx.name, trx.items, trx.total, trx.cash || 0, trx.change || 0, trx.status);
+        // Pastikan fallback dikirim juga ke fungsi cetak
+        const namaTampil = trx.name || trx.customerName || "Pelanggan Umum";
+        const statusTampil = trx.status || trx.paymentStatus || "Belum Lunas";
+        const totalTampil = trx.total || 0;
+        window.printThermalReceipt(trx.invoice, namaTampil, trx.items, totalTampil, trx.cash || 0, trx.change || 0, statusTampil);
     }
 });
 
@@ -539,11 +554,17 @@ document.getElementById('refreshHistoryBtn').addEventListener('click', () => loa
 function sendReceiptWA(trx) {
     if (!trx.wa) { alert('Nomor WhatsApp pelanggan tidak tersedia.'); return; }
     const wa = formatWhatsApp(trx.wa);
-    let pesan = `Halo ${trx.name || ''}, terima kasih sudah menggunakan CoX Laundry!\n\n` +
+    
+    // Pastikan fallback nilai WA tidak error undefined
+    const namaTampil = trx.name || trx.customerName || "Pelanggan";
+    const statusTampil = trx.status || trx.paymentStatus || "Belum Lunas";
+    const totalTampil = trx.total || 0;
+
+    let pesan = `Halo ${namaTampil}, terima kasih sudah menggunakan CoX Laundry!\n\n` +
         `No. Invoice: ${trx.invoice}\n` +
         `Rincian: ${trx.items}\n` +
-        `Total: ${formatRupiah(trx.total)}\n` +
-        `Status: ${trx.status}\n`;
+        `Total: ${formatRupiah(totalTampil)}\n` +
+        `Status: ${statusTampil}\n`;
         
     if (trx.selesai) {
         pesan += `Estimasi Selesai: ${trx.selesai}\n\n`;
