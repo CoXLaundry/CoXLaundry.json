@@ -251,6 +251,7 @@ function renderCart() {
         }).join('');
     }
     calculateTotal();
+    perbaruiTampilanWaktu();
 }
 
 cartItemsContainer.addEventListener('input', (e) => {
@@ -346,7 +347,21 @@ function hitungEstimasiSelesai(keranjangBelanja) {
             break;
         }
     }
+    function perbaruiTampilanWaktu() {
+    const tglMasukEl = document.getElementById('tglMasukDisplay');
+    const tglSelesaiEl = document.getElementById('tglSelesaiDisplay');
     
+    if (!tglMasukEl || !tglSelesaiEl) return;
+
+    if (cart.length === 0) {
+        tglMasukEl.value = '';
+        tglSelesaiEl.value = '';
+    } else {
+        const waktu = hitungEstimasiSelesai(cart);
+        tglMasukEl.value = waktu.masuk;
+        tglSelesaiEl.value = waktu.selesai;
+    }
+}   
     const estimasiSelesai = new Date(sekarang.getTime());
     if (isExpress) {
         estimasiSelesai.setHours(estimasiSelesai.getHours() + 12); // Express 12 Jam

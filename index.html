@@ -121,6 +121,22 @@
                     <div class="cart-items" id="cartItems"></div>
                 </div>
                 <div class="form-card">
+                    <!-- Bagian Estimasi Waktu (Tambahkan sebelum bagian 4. Pembayaran) -->
+<div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+    <h3 style="font-size: 14px; font-weight: 700; color: #000996; margin-bottom: 15px;">⏱️ Estimasi Waktu Pengerjaan</h3>
+    <div style="display: flex; gap: 15px;">
+        <div style="flex: 1;">
+            <label style="font-size: 12px; color: #6b7280; margin-bottom: 5px; display: block;">Waktu Masuk</label>
+            <input type="text" id="tglMasukDisplay" readonly placeholder="Otomatis saat item ditambahkan..." 
+                   style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; color: #374151; font-size: 13px; outline: none; cursor: not-allowed; box-sizing: border-box;">
+        </div>
+        <div style="flex: 1;">
+            <label style="font-size: 12px; color: #6b7280; margin-bottom: 5px; display: block;">Estimasi Selesai (Otomatis Express/Reguler)</label>
+            <input type="text" id="tglSelesaiDisplay" readonly placeholder="Otomatis terisi..." 
+                   style="width: 100%; padding: 10px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8; font-weight: 600; font-size: 13px; outline: none; cursor: not-allowed; box-sizing: border-box;">
+        </div>
+    </div>
+</div>
                     <h3>4. Pembayaran</h3>
                     <div class="summary-row" style="margin-bottom: 12px;">
                         <span style="font-size: 13px; font-weight: 600;">Status Pembayaran</span>
