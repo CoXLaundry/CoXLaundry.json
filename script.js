@@ -50,15 +50,22 @@ document.getElementById('loginBtn').addEventListener('click', () => {
     fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: "login", username: u, pin: p }) })
     .then(res => res.json()).then(data => {
         if (data.status === "success") {
-            localStorage.setItem('cox_session', JSON.stringify({ username: u, pin: p, role: data.role, permissions: data.permissions || "" }));
+            localStorage.setItem('cox_session', JSON.stringify({ username: u, token: data.token, role: data.role, permissions: data.permissions || "" }));
             checkSession();
-        } else document.getElementById('loginMessage').innerText = "Username/PIN salah!";
+        } else document.getElementById('loginMessage').innerText = data.message || "Username/PIN salah!";
     }).catch(() => { document.getElementById('loginMessage').innerText = "Gagal terhubung ke server. Cek koneksi internet."; })
     .finally(() => document.getElementById('loginBtn').innerText = "Masuk Aplikasi");
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
-    if(confirm("Keluar dari aplikasi?")) { localStorage.removeItem('cox_session'); location.reload(); }
+    if(confirm("Keluar dari aplikasi?")) {
+        if (currentUser && currentUser.token) {
+            // Best-effort: tetap logout secara lokal walau request ini gagal/lambat.
+            fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'logout', token: currentUser.token }) }).catch(() => {});
+        }
+        localStorage.removeItem('cox_session');
+        location.reload();
+    }
 });
 
 // --- MANAJEMEN USER & PERMISSIONS ---
@@ -152,6 +159,7 @@ function loadCatalogFromCloud() {
     if (!currentUser) return;
     fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: withAuth({ action: 'get_catalog' }) })
     .then(res => res.json()).then(data => {
+        if (isSessionError(data)) { forceReLogin(data.message); return; }
         products = data.catalog || []; 
         customers = data.customers || []; 
         transactions = data.transactions || []; 
@@ -192,17 +200,29 @@ function escapeHtml(value) {
     }[ch]));
 }
 
-// Menempelkan identitas user yang sedang login ke SETIAP request ke backend, supaya
-// Code.gs bisa memverifikasi ulang siapa pengirimnya dan apakah dia berhak melakukan
-// action ini — bukan cuma percaya pada apa yang dikirim client. Nama field sengaja
-// "actorUsername"/"actorPin" (bukan "username"/"pin") supaya tidak bentrok dengan field
-// yang sudah dipakai untuk data target, misalnya user baru yang sedang dibuat di add_user.
+// Menempelkan token sesi (bukan lagi PIN mentah) ke SETIAP request ke backend,
+// supaya Code.gs bisa memverifikasi identitas & izin lewat sheet "Sesi" tanpa
+// PIN harus disimpan/kirim ulang terus-menerus. Token didapat sekali saat
+// login dan dicabut (dihapus di server) saat logout atau saat kedaluwarsa.
 function withAuth(payload) {
     return JSON.stringify({
         ...payload,
-        actorUsername: currentUser ? currentUser.username : '',
-        actorPin: currentUser ? currentUser.pin : ''
+        token: currentUser ? currentUser.token : ''
     });
+}
+
+// Kalau server bilang token tidak valid/kedaluwarsa, jangan cuma tampilkan alert
+// dan macet di situ — bersihkan sesi lokal dan kembalikan user ke layar login,
+// supaya mereka bisa langsung login ulang.
+function isSessionError(result) {
+    return result && result.status !== 'success' && typeof result.message === 'string' &&
+        (result.message.includes('sesi') || result.message.includes('Sesi') || result.message.includes('terautentikasi'));
+}
+
+function forceReLogin(message) {
+    alert(message || 'Sesi berakhir, silakan login ulang.');
+    localStorage.removeItem('cox_session');
+    location.reload();
 }
 
 function formatWhatsApp(number) {
